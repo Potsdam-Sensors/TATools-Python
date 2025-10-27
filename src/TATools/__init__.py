@@ -1,2 +1,2 @@
-__all__ = ["plotting"]
+__all__ = ["plotting", "processing"]
 __version__ = "0.1.0"

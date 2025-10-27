@@ -42,3 +42,8 @@ packages = ["src/TATools"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src/TATools", "README.md", "LICENSE", "pyproject.toml"]
+
+[tool.hatch.build]
+include = [
+  "src/TATools/examples/**/*",
+]
