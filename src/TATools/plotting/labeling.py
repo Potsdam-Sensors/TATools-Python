@@ -2,8 +2,7 @@ from typing import Union, Optional
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from .normalization import Normalization
-from .smoothing import Smoothing
+from TATools.smoothing import Normalization, Smoothing
 
 def title_append_norm_smooth(o: Union[Axes, Figure], smoothing: Optional[Smoothing] = None, normalization: Optional[Normalization] = None,
                              label_smoothing: bool = True, label_normalization: bool = True, reverse_order: bool = False,

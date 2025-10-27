@@ -26,3 +26,5 @@ def re_match(regexp: Union[re.Pattern, str]) -> MatchFunc:
     if isinstance(regexp, str):
         regexp = re.compile(regexp)
     return lambda st: bool(regexp.match(st))
+
+match_extension = lambda ext: lambda fp: pathlib.Path(fp).suffix == ext

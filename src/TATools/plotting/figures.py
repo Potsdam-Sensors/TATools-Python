@@ -1,9 +1,6 @@
+from .util import GraphReturn, Axes, Figure, FigSize
 from typing import Optional, Literal, List, Union, Tuple
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
-FigSize = Tuple[float,float]
-GraphReturn = Tuple[Figure, Union[Axes, List[Axes]]]
 
 def set_yaxis_color(ax: Axes, color: str, spine: Literal['left','right'] = 'right') -> None:
     ax.tick_params(axis='y', colors=color)

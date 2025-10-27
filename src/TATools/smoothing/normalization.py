@@ -27,10 +27,13 @@ class Normalization:
         raise NotImplementedError()
 
     def _label_latex(self) -> str:
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def _label_no_latex(self) -> str:
-        raise NotImplementedError
+        raise NotImplementedError()
+    
+    def _units(self, *args) -> str:
+        raise NotImplementedError()
 
     def apply(self, d: Data, axis: Optional[int] = None) -> Data:
         arr, idx, cols, was_series = _as_numpy(d)
@@ -39,6 +42,9 @@ class Normalization:
 
     def label(self, latex: bool = True) -> str:
         return self._label_latex() if latex else self._label_no_latex()
+    
+    def units(self, *args) -> str:
+        return self._units(*args)
 
 class L1Normalization(Normalization):
     def __init__(self, eps: Optional[float] = None):
@@ -57,6 +63,9 @@ class L1Normalization(Normalization):
 
     def _label_no_latex(self) -> str:
         return "L1 Normalization"
+    
+    def _units(self, *args) -> str:
+        return ""
 
 class MinMaxNormalization(Normalization):
     def __init__(self, eps: Optional[float] = None, nan_safe: bool = False):
@@ -81,6 +90,9 @@ class MinMaxNormalization(Normalization):
 
     def _label_no_latex(self) -> str:
         return "Min–Max Normalization"
+
+    def _units(self, *args) -> str:
+        return "% of range"
 
 class PDFNormalization(Normalization):
     """
@@ -125,8 +137,47 @@ class PDFNormalization(Normalization):
 
         return d / (s * w_b)
 
+    def _infer_axis_for_pandas(self, d: PandasData, axis: Optional[int]) -> Optional[int]:
+        if axis is not None:
+            return axis
+        if isinstance(d, pd.Series):
+            if len(d) == len(self.w):
+                return 0
+            raise ValueError(
+                f"Cannot infer axis: Series length {len(d)} != bin_widths length {len(self.w)}"
+            )
+        if isinstance(d, pd.DataFrame):
+            candidates = [i for i, n in enumerate(d.shape) if n == len(self.w)]
+            if len(candidates) == 1:
+                return candidates[0]
+            if len(candidates) == 0:
+                raise ValueError(
+                    f"Cannot infer axis: neither DataFrame axis matches bin_widths length {len(self.w)} "
+                    f"(df.shape={d.shape})"
+                )
+            # len==2: both match; ambiguous
+            raise ValueError(
+                f"Ambiguous axis: both DataFrame axes match bin_widths length {len(self.w)} "
+                f"(df.shape={d.shape}). Please specify axis explicitly (0 for rows, 1 for columns)."
+            )
+        return None  # numpy: keep existing behavior
+
+    def apply(self, d: Data, axis: Optional[int] = None) -> Data:
+        # If pandas and axis not given, try to infer it
+        inferred_axis = self._infer_axis_for_pandas(d, axis) if isinstance(d, (pd.Series, pd.DataFrame)) else axis
+        arr, idx, cols, was_series = _as_numpy(d)
+        out = self._func(arr, inferred_axis)
+        return _from_numpy(out, idx, cols, was_series)
+
     def _label_latex(self) -> str:
         return "PDF Normalization"
 
     def _label_no_latex(self) -> str:
         return "PDF Normalization"
+
+    def units(self, input_units: str = "unit", *args, latex: bool = True) -> str:
+        if latex:
+            return f"$({input_units})^{{-1}}$"
+        else:
+            return f"1/({input_units})"
+

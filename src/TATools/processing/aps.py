@@ -2,6 +2,7 @@ import pandas as pd
 from typing import Union, Tuple, Dict
 import numpy as np
 import pathlib
+from .util import matchdir, match_extension
 
 FilePath = Union[str, pathlib.Path]
 APS_BIN_HEADERS = ['<0.523', '0.542', '0.583', '0.626', '0.673', '0.723', '0.777', '0.835',
@@ -44,5 +45,20 @@ def read_aps(filepath: FilePath) -> Tuple[pd.DataFrame, Dict]:
         df = df.set_index(['Aerodynamic Diameter', 'DateTime']).unstack('Aerodynamic Diameter').swaplevel(0, axis=1)
     else:
         df.set_index("DateTime", inplace=True)
+
+    df['Sample Period'] = pd.Timedelta(seconds=int(header['Sample Time']))
         
     return df, header
+
+def read_folder_aps(dir: FilePath, concat_kwargs: Dict = {}) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    data_and_headers = [read_aps(fp) for fp in matchdir(match_extension(".txt"))(dir)]
+    return pd.concat([x[0] for x in data_and_headers], **concat_kwargs), pd.DataFrame([x[1] for x in data_and_headers])
+
+_NUMERIC_HEADERS = np.array([float(h.strip("<")) for h in APS_BIN_HEADERS])
+geometric_mean_midpoints = lambda diams: np.sqrt(diams[:-2]*diams[2:])
+
+aps_bin_boundaries = lambda lwr_bnd = 0.486968, upr_bnd = 20.5353, diams = _NUMERIC_HEADERS: np.concatenate([
+    [lwr_bnd, diams[0]],
+    geometric_mean_midpoints(diams),
+    [upr_bnd]
+])
