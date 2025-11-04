@@ -1,6 +1,8 @@
 from typing import Union, Optional
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.dates import DateFormatter
+from tzlocal import get_localzone
 
 from TATools.smoothing import Normalization, Smoothing
 
@@ -41,6 +43,28 @@ def title_append_norm_smooth(o: Union[Axes, Figure], smoothing: Optional[Smoothi
         raise ValueError("arg `o` must be Figure or Axes")    
 
         
-            
-        
+def set_datetime_xaxis_format(ax: Axes, date_format: str = "%m-%d %H:%M",
+                              rotation: Optional[int] = None, label_tz: Optional[Union[bool, str]] = None) -> None:
+    """
+    Set the x-axis of the given Axes to a datetime format.
+    Optionally rotate the x-axis labels by `rotation` degrees.
+    Optionally label the x-axis with the local timezone if `label_tz` is True, or with the given string if `label_tz` is a string.
 
+    `date_format` uses the same format codes as `datetime.strftime`. See https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes for details.
+
+
+    For example, "%Y-%m-%d %H:%M:%S" would format dates like "2023-03-15 14:30:00", but if you don't want the year and seconds, you could use "%m-%d %H:%M" to get "03-15 14:30".
+    """
+    ax.xaxis.set_major_formatter(DateFormatter(date_format))
+    if rotation is not None:
+        for label in ax.get_xticklabels():
+            label.set_rotation(rotation)
+
+    xlabel = None
+    if label_tz is not None:
+        if label_tz is True:
+            xlabel = f"{get_localzone()}"
+        elif isinstance(label_tz, str):
+            xlabel = label_tz
+    if xlabel:
+        ax.set_xlabel(xlabel)

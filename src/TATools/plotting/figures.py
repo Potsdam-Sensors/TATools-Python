@@ -1,5 +1,5 @@
-from .util import GraphReturn, Axes, Figure, FigSize
-from typing import Optional, Literal, List, Union, Tuple
+from .util import GraphReturn, Axes, Figure, FigSize, CyclicList
+from typing import Optional, Literal, List, Union, Tuple, Any
 import matplotlib.pyplot as plt
 
 def set_yaxis_color(ax: Axes, color: str, spine: Literal['left','right'] = 'right') -> None:
@@ -30,10 +30,21 @@ def add_yaxis(ax: Axes, color: str = "black", label: Optional[str] = None, third
     fig.tight_layout()
     return new_ax
 
-def multi_yaxis_figure(n_yaxes: int, colors: Union[str,List[str]], figsize: FigSize = (13, 6)) -> GraphReturn:
+def multi_yaxis_figure(n_yaxes: int, figsize: FigSize = (13, 6),
+                       colors: Union[str,List[str]] = CyclicList(["blue", "orange", "green", "red", "purple", "brown", "pink", "gray"]),
+                       ylabels: Optional[List[str]] = None, to_plot: Optional[Any] = None) -> GraphReturn:
     fig, ax = plt.subplots(1,1, figsize=figsize)
 
     axes: 'list[Axes]' = [ax] + [add_yaxis(ax, colors[i]) for i in range(1,n_yaxes)]
     set_yaxis_color(ax, colors[0], 'left')
+
+    if to_plot:
+        for ax, c, data in zip(axes, CyclicList(colors), to_plot):
+            ax.plot(data, color=c)
+    if ylabels:
+        for axis, label in zip(axes, ylabels):
+            axis.set_ylabel(label)
+
+    fig.tight_layout()
 
     return fig, axes
