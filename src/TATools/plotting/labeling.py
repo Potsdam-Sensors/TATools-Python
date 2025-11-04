@@ -1,8 +1,9 @@
-from typing import Union, Optional
+from typing import Union, Optional, Iterable, Any
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.dates import DateFormatter
 from tzlocal import get_localzone
+from .util import decide_timezone, timezone_now
 
 from TATools.smoothing import Normalization, Smoothing
 
@@ -44,7 +45,8 @@ def title_append_norm_smooth(o: Union[Axes, Figure], smoothing: Optional[Smoothi
 
         
 def set_datetime_xaxis_format(ax: Axes, date_format: str = "%m-%d %H:%M",
-                              rotation: Optional[int] = None, label_tz: Optional[Union[bool, str]] = None) -> None:
+                              rotation: Optional[int] = None, label_tz: Optional[Union[bool, str]] = None,
+                              data_index: Optional[Iterable[Any]] = None, verbose: bool = False, try_tight_layout: bool = True) -> None:
     """
     Set the x-axis of the given Axes to a datetime format.
     Optionally rotate the x-axis labels by `rotation` degrees.
@@ -55,6 +57,9 @@ def set_datetime_xaxis_format(ax: Axes, date_format: str = "%m-%d %H:%M",
 
     For example, "%Y-%m-%d %H:%M:%S" would format dates like "2023-03-15 14:30:00", but if you don't want the year and seconds, you could use "%m-%d %H:%M" to get "03-15 14:30".
     """
+    if data_index is not None and label_tz is not True:
+        raise ValueError("If `data_index` is provided, `label_tz` must be True to decide timezone from data.")
+    
     ax.xaxis.set_major_formatter(DateFormatter(date_format))
     if rotation is not None:
         for label in ax.get_xticklabels():
@@ -63,8 +68,17 @@ def set_datetime_xaxis_format(ax: Axes, date_format: str = "%m-%d %H:%M",
     xlabel = None
     if label_tz is not None:
         if label_tz is True:
-            xlabel = f"{get_localzone()}"
+            if data_index is not None:
+                xlabel = decide_timezone(data_index)
+            else:
+                xlabel = timezone_now()
         elif isinstance(label_tz, str):
             xlabel = label_tz
     if xlabel:
+        if verbose:
+            print(f"Setting x-axis label to: \"{xlabel}\"")
         ax.set_xlabel(xlabel)
+
+    fig = ax.get_figure()
+    if fig and (try_tight_layout or fig.get_tight_layout()):
+        fig.tight_layout() # Call this again just to make sure things fit
