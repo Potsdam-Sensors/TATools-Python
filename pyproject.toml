@@ -30,6 +30,12 @@ dependencies = [
   "matplotlib>=3.8",
 ]
 
+[project.scripts]
+tatools-opera_pulses_primaryraw = "TATools.cli.opera_primaryraw_to_pulses:main"
+tatools-opera_pulses_primaryraw-no_idx = "TATools.cli.opera_primaryraw_to_pulses_no_buffnum_no_peakidx:main"
+tatools-opera_pulses_primaryraw-csv-no_idx = "TATools.cli.opera_primaryrawcsv_to_pulses_no_buffnum_no_peakidx:main"
+
+
 # Optional extras for convenience installs
 [project.optional-dependencies]
 jupyter = ["notebook>=7"]
