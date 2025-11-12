@@ -19,7 +19,7 @@ def read_multiple_(filepaths: List[FilePath], f: ReadFunc, concat_kwargs: Dict =
 def read_multiple(f: ReadFunc, concat_kwargs: Dict = {}) -> Callable[[List[FilePath]], pd.DataFrame]:
     return lambda filepaths: read_multiple_(filepaths, f, concat_kwargs)
 
-def read_match(f: ReadFunc, m: MatchFunc, concat_kwargs: Dict = {}) -> Callable[[List[FilePath]], pd.DataFrame]:
+def read_match(f: ReadFunc, m: MatchFunc, concat_kwargs: Dict = {}) -> Callable[[FilePath], pd.DataFrame]:
     return lambda dir: read_multiple(f, concat_kwargs)(matchdir(m)(dir))
 
 def re_match(regexp: Union[re.Pattern, str]) -> MatchFunc:
