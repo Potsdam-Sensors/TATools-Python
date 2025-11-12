@@ -21,7 +21,7 @@ VAR_UNIT_MAP = {
 def plot_wps(df: pd.DataFrame, var: Union[Literal['dN in #/cc', 'dN/dlogDp'], str] = 'dN in #/cc', split_timedelta: Optional[str] = "4min", channels: List[float] = None,
              normalization: Optional[Normalization] = None, smoothing: Optional[Smoothing] = None,
              do_cbar: bool = True, cbar_label: Optional[str] = "auto", cnorm: Optional[Normalize] = LogNorm(),
-             logscale_y: bool = True, title: Optional[str] = "APS %s", do_title_addons: bool = True,
+             logscale_y: bool = True, title: Optional[str] = "WPS %s", do_title_addons: bool = True,
              ylabel: str = "$D_p$ (%s)", use_nm: bool = True,
              ax: Optional[Axes] = None, figsize: FigSize = (13, 5)) -> GraphReturn:
     fig = None
