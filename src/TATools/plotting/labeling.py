@@ -1,7 +1,8 @@
 from typing import Union, Optional, Iterable, Any
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from matplotlib.dates import DateFormatter
+from matplotlib.dates import DateFormatter, AutoDateLocator
+import matplotlib.pyplot as plt
 from tzlocal import get_localzone
 from .util import decide_timezone, timezone_now
 
@@ -43,8 +44,9 @@ def title_append_norm_smooth(o: Union[Axes, Figure], smoothing: Optional[Smoothi
     else:
         raise ValueError("arg `o` must be Figure or Axes")    
 
-        
+from zoneinfo import ZoneInfo
 def set_datetime_xaxis_format(ax: Axes, date_format: str = "%m-%d %H:%M",
+                              tz: Optional[Union[ZoneInfo, str]] = get_localzone(),
                               rotation: Optional[int] = None, label_tz: Optional[Union[bool, str]] = None,
                               data_index: Optional[Iterable[Any]] = None, verbose: bool = False, try_tight_layout: bool = True) -> None:
     """
@@ -59,8 +61,12 @@ def set_datetime_xaxis_format(ax: Axes, date_format: str = "%m-%d %H:%M",
     """
     if data_index is not None and label_tz is not True:
         raise ValueError("If `data_index` is provided, `label_tz` must be True to decide timezone from data.")
-    
-    ax.xaxis.set_major_formatter(DateFormatter(date_format))
+    if data_index is not None and tz is not None and data_index[0].tz is not None and data_index[0].tz != tz:
+        tz = data_index[0].tz
+        print(f"[WARNING] Will override given arg 'tz' with timezone from 'date_index'. If you don't want this behavior, do not supply 'data_index'.")
+
+    ax.xaxis.set_major_formatter(DateFormatter(date_format, tz=tz))
+    ax.xaxis.set_major_locator(AutoDateLocator(tz=tz))
     if rotation is not None:
         for label in ax.get_xticklabels():
             label.set_rotation(rotation)
