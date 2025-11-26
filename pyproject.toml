@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "TATools"
-version = "0.1.0"
+version = "0.1.1"
 description = "Reusable plotting, smoothing, and normalization helpers for pandas/Matplotlib time series."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,9 +31,8 @@ dependencies = [
 ]
 
 [project.scripts]
-tatools-opera_pulses_primaryraw = "TATools.cli.opera_primaryraw_to_pulses:main"
-tatools-opera_pulses_primaryraw-no_idx = "TATools.cli.opera_primaryraw_to_pulses_no_buffnum_no_peakidx:main"
-tatools-opera_pulses_primaryraw-csv-no_idx = "TATools.cli.opera_primaryrawcsv_to_pulses_no_buffnum_no_peakidx:main"
+convert-opera-pulses = "TATools.cli.convert_opera_primaryraw:main"
+convert-opera-legacy = "TATools.cli.convert_opera_legacy:main"
 
 
 # Optional extras for convenience installs
