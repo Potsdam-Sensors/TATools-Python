@@ -21,14 +21,23 @@ PIN_NAME_MAP = {**LASER_NAME_MAP, **PD0_NAME_MAP}
 
 name_and_pin_str = lambda pin: f"{PIN_NAME_MAP.get(pin) or pin} [{pin}]"
 
+sps30_columns_pn = ['sps30_pn0p5', 'sps30_pn1', 'sps30_pn2p5', 'sps30_pn4', 'sps30_pn10']
+sps30_columns_pm = ['sps30_pm1', 'sps30_pm2p5', 'sps30_pm4', 'sps30_pm10']
 VAR_NAME_MAP = {
     'integral': "Pulse Area",
     'height': 'Pulse Height',
     'laser': 'Laser',
     'pulses_per_second': "Pulses Per Second",
     'num_pulse': "#",
+    'sps30_pn0p5': r"SPS30 $PN_{0.5 \mu m}$",
+    'sps30_pn1': r"SPS30 $PN_{1 \mu m}$",
+    'sps30_pn2p5': r"SPS30 $PN_{2.5 \mu m}$",
+    'sps30_pn4': r"SPS30 $PN_{4 \mu m}$",
     'sps30_pn10': r"SPS30 $PN_{10 \mu m}$",
+    'sps30_pm1': r"SPS30 $PM_{1 \mu m}$",
     'sps30_pm2p5': r"SPS30 $PM_{2.5 \mu m}$",
+    'sps30_pm4': r"SPS30 $PM_{4 \mu m}$",
+    'sps30_pm10': r"SPS30 $PM_{10 \mu m}$",
     'unix': "Date & Time",
 
     'area_25pc_width': r"Pulse Area at $\frac{1}{4}$-Peak Width",
@@ -51,11 +60,20 @@ VAR_NAME_MAP = {
     'max_laser_on': "Max. Initial Laser ADC Resp.",
     'height_ratio': r"Side-PD Pulse Height as % of Center-PD",
 }
+
+
 VAR_UNIT_MAP = {
     'integral': r"$ADC\ Count \cdot Steps$",
     'pulses_per_second': r"#/s",
+    'sps30_pn0p5': r"#/cc",
+    'sps30_pn1': r"#/cc",
+    'sps30_pn2p5':r"#/cc",
+    'sps30_pn4': r"#/cc",
     'sps30_pn10': r"#/cc",
+    'sps30_pm1': r"$\mu g / m^3$",
     'sps30_pm2p5': r"$\mu g / m^3$",
+    'sps30_pm4': r"$\mu g / m^3$",
+    'sps30_pm10': r"$\mu g / m^3$",
     'height': 'ADC Count',
     'max_laser_on': 'ADC Count',
     'raw_25pc_width': "ADC Steps",
