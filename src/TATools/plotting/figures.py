@@ -111,10 +111,17 @@ def ax_legend_segmented(ax: Axes, handles: List, titles: List, make_handles_unqi
 
 import matplotlib.pyplot as plt
 
-def move_legend_outside_auto(ax, legend, *, pad=0.01, fig_pad=0.02):
+def move_legend_outside_auto(
+    ax,
+    legend,
+    *,
+    pad=0.01,
+    fig_pad=0.02,
+    shrink_all_axes=False,
+):
     """
-    Move legend just outside the axes on the right, automatically shrinking
-    the axes so the legend fits perfectly inside the figure.
+    Move legend just outside the axes (or the whole subplot area) on the right,
+    automatically shrinking the axes so the legend fits perfectly inside the figure.
 
     Parameters
     ----------
@@ -123,56 +130,90 @@ def move_legend_outside_auto(ax, legend, *, pad=0.01, fig_pad=0.02):
     legend : matplotlib.legend.Legend
         Legend to move.
     pad : float
-        Padding between the right edge of the axes and the *left* edge of the legend
-        (in figure coordinates).
+        Padding between the right edge of the axes block and the *left* edge
+        of the legend (in figure coordinates).
     fig_pad : float
-        Padding between the *right* edge of the legend and the right edge of the figure
-        (in figure coordinates).
+        Padding between the *right* edge of the legend and the right edge
+        of the figure (in figure coordinates).
+    shrink_all_axes : bool
+        If False (default), only shrink the given `ax` to make room for the legend.
+        If True, shrink all visible axes in the figure together so that the legend
+        sits to the right of the entire subplot area.
 
     Returns
     -------
     legend : matplotlib.legend.Legend
         The repositioned legend.
     """
-
     fig = ax.figure
 
-    # We need a renderer to measure the legend; this requires a draw.
-    fig.canvas.draw()  # side-effecty, but necessary to get accurate bbox
-
-    # Current axes position in figure coords
-    box = ax.get_position()
-
-    # Legend bbox in display coords -> convert to figure coords
+    # Need a renderer to measure the legend.
+    fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
+
+    # Legend bbox in display coords -> figure coords
     leg_bbox_disp = legend.get_window_extent(renderer=renderer)
     leg_bbox_fig = leg_bbox_disp.transformed(fig.transFigure.inverted())
-
     leg_width = leg_bbox_fig.width
-    leg_height = leg_bbox_fig.height
 
-    # Compute where the legend's LEFT edge should go:
-    #   - 'fig_pad' from the right edge of the figure
+    # Where the legend's LEFT edge should go (fixed by fig_pad)
     x_leg_left = 1.0 - fig_pad - leg_width
 
-    # Now place the axes so that:
-    #   axes_right + pad = x_leg_left
-    axes_right = x_leg_left - pad
-    new_width = axes_right - box.x0
+    if shrink_all_axes:
+        # Use all visible axes to define a "subplot block"
+        axes = [a for a in fig.axes if a.get_visible()]
 
-    if new_width <= 0:
-        # Legend is too wide for this scheme; bail out gracefully.
-        # You could also fall back to no shrink or put legend on top.
-        return legend
+        if not axes:
+            return legend
 
-    # Keep vertical position and height the same
-    ax.set_position([box.x0, box.y0, new_width, box.height])
+        bboxes = [a.get_position() for a in axes]
 
-    # Place legend centered vertically next to the axes
-    y_leg_center = box.y0 + box.height * 0.5
+        left = min(b.x0 for b in bboxes)
+        right = max(b.x0 + b.width for b in bboxes)
+        total_width = right - left
+
+        # New right edge of the axes block
+        axes_right = x_leg_left - pad
+        new_total_width = axes_right - left
+
+        if new_total_width <= 0:
+            # Legend too wide; bail out gracefully
+            return legend
+
+        scale = new_total_width / total_width
+
+        # Rescale all axes horizontally, preserving relative positions
+        new_bboxes = []
+        for a, b in zip(axes, bboxes):
+            new_x0 = left + (b.x0 - left) * scale
+            new_width = b.width * scale
+            a.set_position([new_x0, b.y0, new_width, b.height])
+            new_bboxes.append(a.get_position())
+
+        # Vertical center of the whole subplot block
+        bottom = min(b.y0 for b in new_bboxes)
+        top = max(b.y0 + b.height for b in new_bboxes)
+        y_leg_center = bottom + 0.5 * (top - bottom)
+
+    else:
+        # Original behavior: only adjust this one axes
+        box = ax.get_position()
+
+        axes_right = x_leg_left - pad
+        new_width = axes_right - box.x0
+
+        if new_width <= 0:
+            return legend
+
+        ax.set_position([box.x0, box.y0, new_width, box.height])
+
+        # Center legend next to this axes only
+        y_leg_center = box.y0 + box.height * 0.5
+
+    # Place legend centered vertically next to the chosen block
     legend.set_bbox_to_anchor(
         (x_leg_left, y_leg_center),
-        transform=fig.transFigure
+        transform=fig.transFigure,
     )
     legend.set_loc("center left")
 
