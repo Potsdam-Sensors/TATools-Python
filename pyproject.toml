@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "TATools"
-version = "0.1.1"
+version = "0.1.2"
 description = "Reusable plotting, smoothing, and normalization helpers for pandas/Matplotlib time series."
 readme = "README.md"
 requires-python = ">=3.10"
