@@ -456,7 +456,7 @@ def convert_file(ifp: pathlib.Path):
         sys.stdout.write("\x1b[?25h")
         sys.stdout.flush()
 
-def __main__():
+def main():
     ifps = get_args()
 
     print()
@@ -466,4 +466,4 @@ def __main__():
         
 
 if __name__ == "__main__":
-    __main__()
+    main()
