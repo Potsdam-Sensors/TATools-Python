@@ -68,8 +68,9 @@ class L1Normalization(Normalization):
         return ""
 
 class MinMaxNormalization(Normalization):
-    def __init__(self, eps: Optional[float] = None, nan_safe: bool = False):
+    def __init__(self, eps: Optional[float] = None, reference_level = 1.0, nan_safe: bool = False):
         self.eps = eps
+        self.reference_level = reference_level
         self.nan_safe = nan_safe
 
     def _reduce(self, f, d, axis, keepdims):
@@ -78,18 +79,23 @@ class MinMaxNormalization(Normalization):
     def _func(self, d: np.ndarray, axis: Optional[int]) -> np.ndarray:
         mn = (np.nanmin if self.nan_safe else np.min)(d, axis=axis, keepdims=True)
         mx = (np.nanmax if self.nan_safe else np.max)(d, axis=axis, keepdims=True)
+        if self.reference_level != 1.0:
+            mx = mx * self.reference_level
         rng = mx - mn
         if not self.eps:
             if np.any(rng == 0): raise ValueError("zero norm along axis")
         else:
             rng = np.maximum(rng, self.eps)
         return (d - mn) / rng
-
+    
     def _label_latex(self) -> str:
-        return "Min–Max Normalization"
+        return self._label_no_latex()
 
     def _label_no_latex(self) -> str:
-        return "Min–Max Normalization"
+        st = "Min-Max Normalization"
+        if self.reference_level != 1.0:
+            st += f" [ref. level = {self.reference_level}x peak]"
+        return st
 
     def _units(self, *args) -> str:
         return "% of range"
