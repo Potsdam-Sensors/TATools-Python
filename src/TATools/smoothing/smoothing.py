@@ -83,6 +83,11 @@ class SmoothingOp(object):
         raise NotImplementedError()
     def label(self) -> str:
         return self._label()
+    
+    def _filename_label(self) -> str:
+        raise NotImplementedError()
+    def filename_label(self) -> str:
+        return self._filename_label()
 
     # pandas paths
     def _grouping_pd(self, d: PandasData):
@@ -113,6 +118,8 @@ class SmoothingOp(object):
 class RollingSmooth(SmoothingOp):
     def _label(self) -> str:
         return f"Rolling {self.window} {self.agg.title()}"
+    def _filename_label(self) -> str:
+        return f"rolling{self.agg}_{self.window}"
     
     # pandas
     def _grouping_pd(self, d: PandasData):
@@ -142,6 +149,8 @@ class RollingSmooth(SmoothingOp):
 class ResampleSmooth(SmoothingOp):
     def _label(self) -> str:
         return f"Aggregated {self.window} {self.agg.title()}s"
+    def _filename_label(self) -> str:
+        return f"resample{self.agg}_{self.window}"
     
     # pandas (needs DatetimeIndex/TimedeltaIndex/PeriodIndex)
     def _grouping_pd(self, d: PandasData):
@@ -201,4 +210,10 @@ class Smoothing(object):
         if len(self.smooths) > 1:
             for sm in self.smooths[1:]:
                 label += ", " + sm._label()
+        return label
+    def filename_label(self) -> str:
+        label = self.smooths[0].filename_label()
+        if len(self.smooths) > 1:
+            for sm in self.smooths[1:]:
+                label += "_" + sm.filename_label()
         return label

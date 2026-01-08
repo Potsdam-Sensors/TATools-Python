@@ -4,6 +4,7 @@ import pandas as pd
 
 PandasData = Union[pd.DataFrame, pd.Series]
 Data = Union[PandasData, np.ndarray]
+_label_float = lambda f: f"{f}".replace(".","p")
 
 def _as_numpy(d: Data) -> Tuple[np.ndarray, Optional[pd.Index], Optional[pd.Index], bool]:
     if isinstance(d, pd.Series):
@@ -32,6 +33,9 @@ class Normalization:
     def _label_no_latex(self) -> str:
         raise NotImplementedError()
     
+    def _filename_label(self) -> str:
+        raise NotImplementedError()
+    
     def _units(self, *args) -> str:
         raise NotImplementedError()
 
@@ -42,21 +46,44 @@ class Normalization:
 
     def label(self, latex: bool = True) -> str:
         return self._label_latex() if latex else self._label_no_latex()
+
+    def filename_label(self) -> str:
+        return self._filename_label()
     
     def units(self, *args) -> str:
         return self._units(*args)
 
 class L1Normalization(Normalization):
-    def __init__(self, eps: Optional[float] = None):
+    def __init__(self, eps: Optional[float] = None, zero_norm_nan: bool = True):
         self.eps = eps
+        self.zero_norm_nan = zero_norm_nan
 
+    # def _func(self, d: np.ndarray, axis: Optional[int]) -> np.ndarray:
+    #     denom = np.sum(np.abs(d), axis=axis, keepdims=True)
+    #     if not self.eps:
+    #         if np.any(denom == 0): raise ValueError("zero norm along axis")
+    #     else:
+    #         denom = np.maximum(denom, self.eps)
+    #     return d / denom
     def _func(self, d: np.ndarray, axis: Optional[int]) -> np.ndarray:
         denom = np.sum(np.abs(d), axis=axis, keepdims=True)
+
         if not self.eps:
-            if np.any(denom == 0): raise ValueError("zero norm along axis")
+            zero_mask = (denom == 0)
+            if np.any(zero_mask):
+                if not getattr(self, "zero_norm_nan", False):
+                    raise ValueError("zero norm along axis")
+
+                # Replace zero denominators with NaN to localize failure
+                denom = np.where(zero_mask, np.nan, denom)
         else:
             denom = np.maximum(denom, self.eps)
+
         return d / denom
+
+    
+    def _filename_label(self) -> str:
+        return "L1Normalized" + (f"_eps{_label_float(self.eps)}" if self.eps else "")
 
     def _label_latex(self) -> str:
         return r"$L_1$ Normalization"
@@ -68,25 +95,58 @@ class L1Normalization(Normalization):
         return ""
 
 class MinMaxNormalization(Normalization):
-    def __init__(self, eps: Optional[float] = None, reference_level = 1.0, nan_safe: bool = False):
+    def __init__(self, eps: Optional[float] = None, reference_level = 1.0, nan_safe: bool = False, zero_norm_nan: bool = True):
         self.eps = eps
         self.reference_level = reference_level
         self.nan_safe = nan_safe
+        self.zero_norm_nan = zero_norm_nan
 
     def _reduce(self, f, d, axis, keepdims):
         return (np.nanmin if self.nan_safe else np.min)(d, axis=axis, keepdims=keepdims)
 
+    # def _func(self, d: np.ndarray, axis: Optional[int]) -> np.ndarray:
+    #     mn = (np.nanmin if self.nan_safe else np.min)(d, axis=axis, keepdims=True)
+    #     mx = (np.nanmax if self.nan_safe else np.max)(d, axis=axis, keepdims=True)
+    #     if self.reference_level != 1.0:
+    #         mx = mx * self.reference_level
+    #     rng = mx - mn
+    #     if not self.eps:
+    #         if np.any(rng == 0): raise ValueError("zero norm along axis")
+    #     else:
+    #         rng = np.maximum(rng, self.eps)
+    #     return (d - mn) / rng
+
     def _func(self, d: np.ndarray, axis: Optional[int]) -> np.ndarray:
         mn = (np.nanmin if self.nan_safe else np.min)(d, axis=axis, keepdims=True)
         mx = (np.nanmax if self.nan_safe else np.max)(d, axis=axis, keepdims=True)
+
         if self.reference_level != 1.0:
             mx = mx * self.reference_level
+
         rng = mx - mn
+
+        # Handle zero-range slices
         if not self.eps:
-            if np.any(rng == 0): raise ValueError("zero norm along axis")
+            zero_mask = (rng == 0)
+            if np.any(zero_mask):
+                if not getattr(self, "zero_norm_nan", False):
+                    raise ValueError("zero norm along axis")
+
+                # Avoid divide-by-zero warnings
+                rng = np.where(zero_mask, np.nan, rng)
         else:
             rng = np.maximum(rng, self.eps)
-        return (d - mn) / rng
+
+        out = (d - mn) / rng
+
+        return out
+
+
+    
+    def _filename_label(self) -> str:
+        return "MinMaxNormalized" \
+            + (f"_reflvl{_label_float(self.reference_level)}" if self.reference_level else "") \
+            + (f"_eps{_label_float(self.eps)}" if self.eps else "")
     
     def _label_latex(self) -> str:
         return self._label_no_latex()
@@ -175,6 +235,10 @@ class PDFNormalization(Normalization):
         out = self._func(arr, inferred_axis)
         return _from_numpy(out, idx, cols, was_series)
 
+    def _filename_label(self) -> str:
+        return "PDFNormalized" \
+            + (f"_eps{_label_float(self.eps)}" if self.eps else "")
+
     def _label_latex(self) -> str:
         return "PDF Normalization"
 
@@ -187,3 +251,129 @@ class PDFNormalization(Normalization):
         else:
             return f"1/({input_units})"
 
+
+class QuantileMinMaxNormalization(Normalization):
+    """
+    Robust Min-Max normalization using quantiles instead of the true min/max.
+
+    For each slice along `axis`:
+        lo = quantile(d, q_low)
+        hi = quantile(d, q_high)
+        y  = (d - lo) / (hi - lo)
+
+    Notes:
+    - If `clip=True`, outputs are clipped to [0, 1]. Otherwise, values can be
+      <0 or >1 when data fall outside [lo, hi].
+    - If `nan_safe=True`, NaNs are ignored when computing quantiles.
+    """
+
+    def __init__(
+        self,
+        q_high: float = 0.99,
+        q_low: float = 0.00,
+        eps: Optional[float] = None,
+        clip: bool = False,
+        nan_safe: bool = False,
+        zero_norm_nan: bool = True,
+    ):
+        if not (0.0 <= q_low < q_high <= 1.0):
+            raise ValueError(f"require 0 <= q_low < q_high <= 1; got {q_low=}, {q_high=}")
+        self.q_low = float(q_low)
+        self.q_high = float(q_high)
+        self.eps = eps
+        self.clip = clip
+        self.nan_safe = nan_safe
+        self.zero_norm_nan = zero_norm_nan
+    
+    # def _func(self, d: np.ndarray, axis: Optional[int]) -> np.ndarray:
+    #     if axis is None:
+    #         # Flatten semantics: compute quantiles over all elements
+    #         flat = d.reshape(-1)
+    #         qfunc = np.nanquantile if self.nan_safe else np.quantile
+    #         lo = qfunc(flat, self.q_low)
+    #         hi = qfunc(flat, self.q_high)
+    #         rng = hi - lo
+    #         if not self.eps:
+    #             if rng == 0:
+    #                 raise ValueError("zero norm (hi - lo == 0)")
+    #         else:
+    #             rng = max(rng, self.eps)
+    #         out = (d - lo) / rng
+    #     else:
+    #         qfunc = np.nanquantile if self.nan_safe else np.quantile
+    #         lo = qfunc(d, self.q_low, axis=axis, keepdims=True)
+    #         hi = qfunc(d, self.q_high, axis=axis, keepdims=True)
+    #         rng = hi - lo
+    #         if not self.eps:
+    #             if np.any(rng == 0):
+    #                 raise ValueError("zero norm along axis (hi - lo == 0)")
+    #         else:
+    #             rng = np.maximum(rng, self.eps)
+    #         out = (d - lo) / rng
+
+    #     if self.clip:
+    #         out = np.clip(out, 0.0, 1.0)
+    #     return out
+
+    def _func(self, d: np.ndarray, axis: Optional[int]) -> np.ndarray:
+        qfunc = np.nanquantile if self.nan_safe else np.quantile
+
+        if axis is None:
+            # Flatten semantics: compute quantiles over all elements
+            flat = d.reshape(-1)
+            lo = qfunc(flat, self.q_low)
+            hi = qfunc(flat, self.q_high)
+            rng = hi - lo
+
+            if not self.eps:
+                if rng == 0:
+                    if not getattr(self, "zero_norm_nan", False):
+                        raise ValueError("zero norm (hi - lo == 0)")
+                    rng = np.nan  # makes whole output NaN (since it's a single global range)
+            else:
+                rng = max(rng, self.eps)
+
+            out = (d - lo) / rng
+
+        else:
+            lo = qfunc(d, self.q_low, axis=axis, keepdims=True)
+            hi = qfunc(d, self.q_high, axis=axis, keepdims=True)
+            rng = hi - lo
+
+            if not self.eps:
+                zero_mask = (rng == 0)
+                if np.any(zero_mask):
+                    if not getattr(self, "zero_norm_nan", False):
+                        raise ValueError("zero norm along axis (hi - lo == 0)")
+                    # Localize failure: only affected slices become NaN
+                    rng = np.where(zero_mask, np.nan, rng)
+            else:
+                rng = np.maximum(rng, self.eps)
+
+            out = (d - lo) / rng
+
+        if self.clip:
+            out = np.clip(out, 0.0, 1.0)
+        return out
+
+
+    def _filename_label(self) -> str:
+        return "QuantileMinMaxNormalized" \
+            + (f"_ql{_label_float(self.q_low)}" if self.q_low else "") \
+            + (f"_qh{_label_float(self.q_high)}" if self.q_high else "") \
+            + (f"_eps{_label_float(self.eps)}" if self.eps else "")
+    
+    def _label_latex(self) -> str:
+        # Keep it simple; you can make this fancier if you want.
+        return self._label_no_latex()
+
+    def _label_no_latex(self) -> str:
+        st = f"Quantile Min-Max Normalization [q=({self.q_low:g}, {self.q_high:g})]"
+        if self.clip:
+            st += " [clipped]"
+        if self.nan_safe:
+            st += " [nan-safe]"
+        return st
+
+    def _units(self, *args) -> str:
+        return "% of robust range"
