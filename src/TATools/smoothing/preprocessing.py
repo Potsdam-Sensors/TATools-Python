@@ -9,6 +9,12 @@ class DataPreprocessor(object):
             assert isinstance(op, (Smoothing, SmoothingOp, Normalization))
         self.operations: List[Union[Smoothing, SmoothingOp, Normalization]] = [op for op in operations if op is not None]
     
+    def normalizes(self) -> bool:
+        return any([isinstance(op, Normalization) for op in self.operations])
+    
+    def smooths(self) -> bool:
+        return any([isinstance(op, (Smoothing, SmoothingOp)) for op in self.operations])
+    
     def apply(self, data: Data) -> Data:
         for op in self.operations:
             if isinstance(op, (Smoothing, SmoothingOp)):

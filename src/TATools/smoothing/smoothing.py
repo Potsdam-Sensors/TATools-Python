@@ -22,6 +22,28 @@ def _pad_leading_nans(out: np.ndarray, pad: int, axis: int) -> np.ndarray:
     pad_block = np.full(pad_shape, np.nan, dtype=out.dtype)
     return np.concatenate([pad_block, out], axis=axis)
 
+def _pad_nans(out: np.ndarray, left: int, right: int, axis: int) -> np.ndarray:
+    if left <= 0 and right <= 0:
+        return out
+
+    axis = axis if axis >= 0 else out.ndim + axis
+    blocks = []
+
+    if left > 0:
+        left_shape = list(out.shape)
+        left_shape[axis] = left
+        blocks.append(np.full(left_shape, np.nan, dtype=out.dtype))
+
+    blocks.append(out)
+
+    if right > 0:
+        right_shape = list(out.shape)
+        right_shape[axis] = right
+        blocks.append(np.full(right_shape, np.nan, dtype=out.dtype))
+
+    return np.concatenate(blocks, axis=axis)
+
+
 def _agg_dispatch(name: AGG_OPTIONS, ddof: int = 1) -> Callable:
     if name == "mean":   return lambda x, axis: np.nanmean(x, axis=axis)
     if name == "median": return lambda x, axis: np.nanmedian(x, axis=axis)
@@ -82,7 +104,10 @@ class SmoothingOp(object):
     def _label(self) -> str:
         raise NotImplementedError()
     def label(self) -> str:
-        return self._label()
+        ret = self._label()
+        if self.axis != -1:
+            ret += f" (axis={self.axis})"
+        return ret
     
     def _filename_label(self) -> str:
         raise NotImplementedError()
@@ -118,19 +143,40 @@ class SmoothingOp(object):
 class RollingSmooth(SmoothingOp):
     def _label(self) -> str:
         return f"Rolling {self.window} {self.agg.title()}"
+    
     def _filename_label(self) -> str:
         return f"rolling{self.agg}_{self.window}"
     
+    def __init__(self, window, agg, *, axis=-1, ddof_std=1, center: bool=False):
+        super().__init__(window, agg, axis=axis, ddof_std=ddof_std)
+        self.center = center
+
     # pandas
-    def _grouping_pd(self, d: PandasData):
-        # center/closed params can be added to match your needs
-        if not isinstance(self.window, int) and not isinstance(self.window, str):
-            raise TypeError("rolling window must be int (periods) or offset string")
-        return d.rolling(self.window)
-    def _agging_pd(self, grouped) -> PandasData:
+    def _agging_pd(self, grouped) -> PandasData: 
         return grouped.aggregate(self.agg)
+    
+    def _grouping_pd(self, d: PandasData):
+        if not isinstance(self.window, (int, str)):
+            raise TypeError("rolling window must be int (periods) or offset string")
+        return d.rolling(self.window, center=self.center)
 
     # numpy
+    def _agging_np(self, windows: np.ndarray) -> np.ndarray:
+        agg = _agg_dispatch(self.agg, ddof=self.ddof_std)
+
+        # sliding_window_view appends the window dimension at the end
+        out = agg(windows, axis=-1)
+
+        axis = self.axis if self.axis >= 0 else out.ndim + self.axis
+        pad_total = self.window - 1
+
+        if not self.center:
+            return _pad_nans(out, left=pad_total, right=0, axis=axis)
+
+        left = self.window // 2
+        right = pad_total - left
+        return _pad_nans(out, left=left, right=right, axis=axis)
+
     def _grouping_np(self, arr: np.ndarray) -> np.ndarray:
         if not isinstance(self.window, int):
             raise TypeError("NumPy rolling requires integer window size")
@@ -138,13 +184,6 @@ class RollingSmooth(SmoothingOp):
             raise ValueError("window must be positive")
         return _sliding_window_view(arr, self.window, axis=self.axis)
 
-    def _agging_np(self, windows: np.ndarray) -> np.ndarray:
-        # windows shape: original with one extra "window" dim at `axis+1`
-        agg = _agg_dispatch(self.agg, ddof=self.ddof_std)
-        # aggregate over the new trailing window dimension
-        out = agg(windows, axis=self.axis + 1 if self.axis >= 0 else windows.ndim - 1)
-        # pad to match pandas' leading NaNs
-        return _pad_leading_nans(out, pad=self.window - 1, axis=self.axis)
 
 class ResampleSmooth(SmoothingOp):
     def _label(self) -> str:

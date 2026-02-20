@@ -1,3 +1,4 @@
+from __future__ import annotations
 from .util import GraphReturn, Axes, Figure, FigSize, CyclicList
 from typing import Optional, Literal, List, Union, Tuple, Any
 import matplotlib.pyplot as plt
@@ -8,7 +9,7 @@ def set_yaxis_color(ax: Axes, color: str, spine: Literal['left','right'] = 'righ
     ax.spines[spine].set_color(color)
     ax.yaxis.label.set_color(color)
 
-def add_yaxis(ax: Axes, color: str = "black", label: Optional[str] = None, third_axis_offset_mult: float = 60) -> Axes:
+def add_yaxis(ax: Axes, color: str = "black", label: Optional[str] = None, third_axis_offset_mult: float = 60, existing_axes: Optional[int] = None) -> Axes:
     """
     Add another y-axis to the given plot. 
     If there are already two y-axes, the new axis created will have an offset, `third_axis_offset_mult`, from the right.
@@ -16,8 +17,10 @@ def add_yaxis(ax: Axes, color: str = "black", label: Optional[str] = None, third
     fig = ax.get_figure()
     if not fig:
         raise ValueError("figure for `ax` returned None")
-    n_existing_axes = len(fig.get_axes())
-
+    
+    n_existing_axes = existing_axes
+    if n_existing_axes is None:
+        n_existing_axes = len(fig.get_axes())
     
     new_ax = ax.twinx()
     new_ax.spines['left'].set_visible(False)
@@ -218,3 +221,172 @@ def move_legend_outside_auto(
     legend.set_loc("center left")
 
     return legend
+
+from .util import CyclicList
+
+def make_dummy_legend_lines(labels: List[str], styles: Optional[Union[str, List[str]]] = None, colors: Optional[Union[str, List[str]]] = None,
+                            alphas: Optional[Union[float, List[float]]] = None) -> List[Line2D]:
+    # Load defaults
+    if not colors:
+        colors = "black"
+    if not styles:
+        styles = "solid"
+    if not alphas:
+        alphas = 1
+    
+    # Convert all to cyclic
+    colors = CyclicList(colors)
+    styles = CyclicList(styles)
+    alphas = CyclicList(alphas)
+
+    # Generate return
+    return [Line2D([], [], label=l, linestyle=s, color=c, alpha=a) for l, s, c, a in zip(labels, styles, colors, alphas)]
+
+def make_dummy_legend_patches(labels: List[str], hatches: Optional[Union[str, List[str]]] = None, colors: Optional[Union[str, List[str]]] = None,
+                              alphas: Optional[Union[float, List[float]]] = None) -> List[Rectangle]:
+    # Load defaults
+    if not colors:
+        colors = "black"
+    if not alphas:
+        alphas = 1
+    
+    # Convert all to cyclic
+    colors = CyclicList(colors)
+    hatches = CyclicList(hatches)
+    alphas = CyclicList(alphas)
+
+    # Generate return
+    return [Rectangle((0,0), 0, 0, label=l, hatch=h, color=c, alpha=a) for l, h, c, a in zip(labels, hatches, colors, alphas)]
+
+
+import math
+from typing import Optional, Tuple, Union, Sequence
+
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
+
+
+GraphReturn = Tuple[Figure, Union[Axes, "np.ndarray"]]  # matches plt.subplots behavior
+
+
+def make_figure(
+    *,
+    rows: Optional[int] = None,
+    cols: Optional[int] = None,
+    total: Optional[int] = None,
+    figsize: Optional[Tuple[float, float]] = (13, 6),
+    sharex: bool = False,
+    sharey: bool = False,
+    # Auto-figsize model: width = width_base + width_mult * cols, etc.
+    width_base: Optional[float] = None,
+    height_base: Optional[float] = None,
+    width_mult: Optional[float] = None,
+    height_mult: Optional[float] = None,
+    # When total is provided, remove unused axes.
+    remove_unused: bool = True,
+    # Preserve numpy's habit: (rows, cols) array; if False, squeeze like plt.subplots default.
+    squeeze: bool = True,
+) -> Tuple[Figure, "np.ndarray"]:
+    """
+    Create a matplotlib figure + axes grid with optional layout inference and unused-axes removal.
+
+    You may specify:
+      - rows and cols directly, OR
+      - total and exactly one of (rows, cols), OR
+      - total only (defaults cols=1), OR
+      - rows only / cols only is allowed *only if total is provided* (so it can infer the other).
+
+    Figsize options:
+      - Provide figsize explicitly (default (13, 6)), OR
+      - Set figsize=None and provide width_base/height_base plus width_mult/height_mult to
+        compute it as:
+            (width_base + width_mult * cols, height_base + height_mult * rows)
+
+    Unused axes:
+      If total is given and rows*cols > total, the extra axes are removed from the figure
+      (unless remove_unused=False).
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    axes : np.ndarray[Axes]
+        Always returned as a 2D array of shape (rows, cols) if squeeze=True.
+        Note: if remove_unused=True and total < rows*cols, some entries correspond to
+        removed axes; you should index only the first `total` axes via `axes.flat[:total]`.
+    """
+    # ---- validate / infer grid ---------------------------------------------
+    if total is not None:
+        if total <= 0:
+            raise ValueError(f"total must be positive; got {total}")
+
+    if rows is not None and rows <= 0:
+        raise ValueError(f"rows must be positive; got {rows}")
+    if cols is not None and cols <= 0:
+        raise ValueError(f"cols must be positive; got {cols}")
+
+    # If neither rows nor cols is given, infer from total (fallback cols=1).
+    if rows is None and cols is None:
+        if total is None:
+            raise ValueError("Provide either (rows and cols) or total (optionally with rows/cols).")
+        cols = 1
+        rows = math.ceil(total / cols)
+
+    # If one of rows/cols missing, require total to infer the other.
+    if rows is None:
+        if total is None:
+            raise ValueError("cols was provided but rows wasn't; provide total to infer rows.")
+        rows = math.ceil(total / cols)  # type: ignore[arg-type]
+    if cols is None:
+        if total is None:
+            raise ValueError("rows was provided but cols wasn't; provide total to infer cols.")
+        cols = math.ceil(total / rows)
+
+    assert rows is not None and cols is not None
+
+    # If total is given and grid is too small, grow it (nice behavior).
+    if total is not None and rows * cols < total:
+        # Prefer extending rows (keeps column count stable if user set it).
+        rows = math.ceil(total / cols)
+
+    # ---- figsize ------------------------------------------------------------
+    if figsize is None:
+        missing = [name for name, v in {
+            "width_base": width_base,
+            "height_base": height_base,
+            "width_mult": width_mult,
+            "height_mult": height_mult,
+        }.items() if v is None]
+        if missing:
+            raise ValueError(
+                "figsize=None requires width_base, height_base, width_mult, height_mult. "
+                f"Missing: {', '.join(missing)}"
+            )
+        figsize = (
+            float(width_base) + float(width_mult) * cols,
+            float(height_base) + float(height_mult) * rows,
+        )
+
+    # ---- create -------------------------------------------------------------
+    fig, axes = plt.subplots(
+        rows,
+        cols,
+        figsize=figsize,
+        sharex=sharex,
+        sharey=sharey,
+        squeeze=False,  # we control shape
+    )
+
+    # ---- remove extras ------------------------------------------------------
+    if total is not None and remove_unused:
+        flat = axes.ravel()
+        for ax in flat[total:]:
+            ax.remove()
+
+    # Return a stable 2D array (predictable for callers).
+    if squeeze:
+        return fig, axes
+    # If you truly want squeeze-like behavior, you can implement it here, but
+    # I'd keep it always-2D for sanity.
+    return fig, axes
+

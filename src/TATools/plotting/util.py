@@ -25,6 +25,14 @@ class CyclicList(list):
             rng = range(start, stop, step)
             return [super().__getitem__(j % len(self)) for j in rng]
         return super().__getitem__(i % len(self))
+
+    def __iter__(self):
+        if not self:
+            return iter(())  # or raise, your call
+        i = 0
+        while True:
+            yield super().__getitem__(i % len(self))
+            i += 1
     
 find_time_splits = lambda start_times, end_times: np.argwhere(start_times[1:] != end_times[:-1]).reshape(-1)+1
 find_time_splits_period = lambda start_times, periods: find_time_splits(start_times, start_times+periods)
